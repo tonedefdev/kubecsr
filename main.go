@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"flag"
 	"log"
 	"net/http"
@@ -10,15 +11,55 @@ import (
 	"github.com/google/uuid"
 )
 
-type kubeconfig struct {
-	ClusterName string    `json:"clusterName,required"`
+type kubecsr struct {
+	ClusterName string    `json:"clusterName" binding:"required"`
 	Timestamp   time.Time `json:"timestamp"`
 	RequesterIP string    `json:"requesterIP"`
-	User        string    `json:"user,required"`
+	User        string    `json:"user,required" binding:"required"`
 }
 
-var kubeconfigs = []kubeconfig{}
+var kubecsrs = []kubecsr{}
 var requiredToken string
+
+// base64EncodeStr takes a string and returns a base64 encoded string
+func base64EncodeStr(str string) string {
+	encoded := base64.StdEncoding.EncodeToString([]byte(str))
+	return encoded
+}
+
+// createKubconfig adds a request to create a Kubernetes CSR and approve it
+func createkubecsr(c *gin.Context) {
+	var newkubecsr kubecsr
+
+	// Bind the request to the kubecsr struct
+	if err := c.ShouldBindJSON(&newkubecsr); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Add timestamp to request
+	newkubecsr.Timestamp = time.Now()
+
+	// Add requester's IP
+	newkubecsr.RequesterIP = c.Request.RemoteAddr
+
+	// Add the new kubecsr to the slice
+	kubecsrs = append(kubecsrs, newkubecsr)
+	c.IndentedJSON(http.StatusCreated, newkubecsr)
+}
+
+// getkubecsr responds with the list of all kubeeconfigs requested as JSON
+func getkubecsr(c *gin.Context) {
+	c.IndentedJSON(http.StatusOK, kubecsrs)
+}
+
+// initToken creates the initial token if one is not provided and outputs it to the server log
+func initToken() string {
+	token := uuid.New().String()
+	encodedToken := base64EncodeStr(token)
+	log.Printf("The automatitcally generated authorization bearer token is '%s'", encodedToken)
+	return encodedToken
+}
 
 // Return a JSON formatted error response
 func respondWithError(c *gin.Context, code int, message interface{}) {
@@ -44,51 +85,7 @@ func tokenAuthorization() gin.HandlerFunc {
 			respondWithError(c, 401, "Invalid API token")
 			return
 		}
-
-		c.Next()
 	}
-}
-
-// getKubeconfig responds with the list of all kubeeconfigs requested as JSON
-func getKubeconfig(c *gin.Context) {
-	c.IndentedJSON(http.StatusOK, kubeconfigs)
-}
-
-// initToken creates the initial token if one is not provided and outputs it to the server log
-func initToken() string {
-	token := uuid.New().String()
-	log.Printf("The automatitcally generated API authorization token is '%s'", token)
-	return token
-}
-
-// createKubconfig adds a request to create a Kubernetes CSR and approve it
-func createKubeconfig(c *gin.Context) {
-	var newKubeconfig kubeconfig
-
-	// Bind the request to the kubeconfig struct
-	if err := c.BindJSON(&newKubeconfig); err != nil {
-		return
-	}
-
-	// Validate that required fields aren't empty
-	switch {
-	case newKubeconfig.ClusterName == "":
-		respondWithError(c, 400, "ClusterName is required")
-		return
-	case newKubeconfig.User == "":
-		respondWithError(c, 400, "User is required")
-		return
-	}
-
-	// Add timestamp to request
-	newKubeconfig.Timestamp = time.Now()
-
-	// Add requester's IP
-	newKubeconfig.RequesterIP = c.Request.RemoteAddr
-
-	// Add the new kubeconfig to the slice
-	kubeconfigs = append(kubeconfigs, newKubeconfig)
-	c.IndentedJSON(http.StatusCreated, newKubeconfig)
 }
 
 func main() {
@@ -99,15 +96,32 @@ func main() {
 
 	// Set API token used for authorizing API calls
 	if *flagCustomToken == true {
-		requiredToken = *flagToken
+		requiredToken = base64EncodeStr(*flagToken)
 	} else {
 		requiredToken = initToken()
 	}
 
 	// Setup gin router
 	router := gin.Default()
+
+	// Setup token authorization middleware
 	router.Use(tokenAuthorization())
-	router.GET("/kubeconfig", getKubeconfig)
-	router.POST("/kubeconfig", createKubeconfig)
-	router.Run("localhost:8080")
+
+	// Setup routes
+	router.GET("/kubecsr", getkubecsr)
+	router.POST("/kubecsr", createkubecsr)
+
+	// Setup server
+	server := http.Server{
+		Addr:           "localhost:443",
+		Handler:        router,
+		ReadTimeout:    10 * time.Second,
+		WriteTimeout:   10 * time.Second,
+		MaxHeaderBytes: 1 << 20,
+	}
+
+	// Listen and serve with TLS
+	if err := server.ListenAndServeTLS("localhost.crt", "localhost.key"); err != nil {
+		log.Fatal(err)
+	}
 }
