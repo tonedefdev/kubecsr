@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"net/http"
 
@@ -82,7 +83,14 @@ func createKubeconfig(c *gin.Context) {
 }
 
 func main() {
-	requiredToken = initToken()
+	flagToken := flag.String("user-generated-token", "", "A user generated token to be used as the authroization token for the API")
+	flag.Parse()
+
+	if *flagToken == "" {
+		requiredToken = initToken()
+	}
+
+	requiredToken = *flagToken
 	router := gin.Default()
 	router.Use(TokenAuthorization())
 	router.GET("/kubeconfig", getKubeconfig)
