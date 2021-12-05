@@ -24,7 +24,7 @@ func respondWithError(c *gin.Context, code int, message interface{}) {
 
 // TokenAuthorization is middleware that validates the request header bearer token matches the
 // token the server started with
-func TokenAuthorization() gin.HandlerFunc {
+func tokenAuthorization() gin.HandlerFunc {
 	return func(c *gin.Context) {
 
 		// Get the Bearer token from the request header
@@ -92,7 +92,7 @@ func main() {
 
 	requiredToken = *flagToken
 	router := gin.Default()
-	router.Use(TokenAuthorization())
+	router.Use(tokenAuthorization())
 	router.GET("/kubeconfig", getKubeconfig)
 	router.POST("/kubeconfig", createKubeconfig)
 	router.Run("localhost:8080")
