@@ -83,7 +83,7 @@ func createKubeconfig(c *gin.Context) {
 }
 
 func main() {
-	flagToken := flag.String("user-generated-token", "", "A user generated token to be used as the authroization token for the API")
+	flagToken := flag.String("use-custom-token", "", "A user generated token to be used as the authroization token for the API")
 	flag.Parse()
 
 	if *flagToken == "" {
