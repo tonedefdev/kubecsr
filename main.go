@@ -58,7 +58,7 @@ func getkubecsr(c *gin.Context) {
 func initToken() string {
 	token := uuid.New().String()
 	encodedToken := base64EncodeStr(token)
-	log.Printf("The automatitcally generated authorization bearer token is '%s'", encodedToken)
+	log.Printf("KubeCSR automatitcally generated the authorization bearer token as '%s'", encodedToken)
 	return encodedToken
 }
 
@@ -100,7 +100,7 @@ func main() {
 	flag.Parse()
 
 	// Log startup hostname and port
-	log.Printf("KubeCSR server starting up with hostname '%s' and port '%d'", *flagHostname, *flagPort)
+	log.Printf("KubeCSR server starting up with hostname '%s' over port '%d'", *flagHostname, *flagPort)
 
 	// Set API token used for authorizing API calls
 	if *flagUseCustomToken {
