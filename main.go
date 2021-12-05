@@ -4,14 +4,17 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
 type kubeconfig struct {
-	ClusterName string `json:"clusterName,required"`
-	User        string `json:"user,required"`
+	ClusterName string    `json:"clusterName,required"`
+	Timestamp   time.Time `json:"timestamp"`
+	RequesterIP string    `json:"requesterIP"`
+	User        string    `json:"user,required"`
 }
 
 var kubeconfigs = []kubeconfig{}
@@ -22,8 +25,8 @@ func respondWithError(c *gin.Context, code int, message interface{}) {
 	c.AbortWithStatusJSON(code, gin.H{"error": message})
 }
 
-// TokenAuthorization is middleware that validates the request header bearer token matches the
-// token the server started with
+// tokenAuthorization is middleware that validates that the request header bearer token matches the
+// token used to initialize the service
 func tokenAuthorization() gin.HandlerFunc {
 	return func(c *gin.Context) {
 
@@ -54,7 +57,7 @@ func getKubeconfig(c *gin.Context) {
 // initToken creates the initial token if one is not provided and outputs it to the server log
 func initToken() string {
 	token := uuid.New().String()
-	log.Printf("The automatitcally generated authorization token is '%s'", token)
+	log.Printf("The automatitcally generated API authorization token is '%s'", token)
 	return token
 }
 
@@ -77,20 +80,31 @@ func createKubeconfig(c *gin.Context) {
 		return
 	}
 
+	// Add timestamp to request
+	newKubeconfig.Timestamp = time.Now()
+
+	// Add requester's IP
+	newKubeconfig.RequesterIP = c.Request.RemoteAddr
+
 	// Add the new kubeconfig to the slice
 	kubeconfigs = append(kubeconfigs, newKubeconfig)
 	c.IndentedJSON(http.StatusCreated, newKubeconfig)
 }
 
 func main() {
-	flagToken := flag.String("use-custom-token", "", "Starts the service with a user generated token instead of automatically generating a token")
+	// Set and parse startup flags
+	flagCustomToken := flag.Bool("use-custom-token", false, "When true this starts the service with a user generated token instead of automatically generating a token")
+	flagToken := flag.String("custom-token", "", "The custom token to use for authorizing API requests")
 	flag.Parse()
 
-	if *flagToken == "" {
+	// Set API token used for authorizing API calls
+	if *flagCustomToken == true {
+		requiredToken = *flagToken
+	} else {
 		requiredToken = initToken()
 	}
 
-	requiredToken = *flagToken
+	// Setup gin router
 	router := gin.Default()
 	router.Use(tokenAuthorization())
 	router.GET("/kubeconfig", getKubeconfig)
