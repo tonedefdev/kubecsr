@@ -46,12 +46,12 @@ func createkubecsr(c *gin.Context) {
 
 	// Add the new kubecsr to the slice
 	kubecsrs = append(kubecsrs, newkubecsr)
-	c.IndentedJSON(http.StatusCreated, newkubecsr)
+	c.JSON(http.StatusCreated, newkubecsr)
 }
 
 // getkubecsr responds with the list of all kubeeconfigs requested as JSON
 func getkubecsr(c *gin.Context) {
-	c.IndentedJSON(http.StatusOK, kubecsrs)
+	c.JSON(http.StatusOK, kubecsrs)
 }
 
 // initToken creates the initial token if one is not provided and outputs it to the server log
@@ -92,17 +92,27 @@ func tokenAuthorization() gin.HandlerFunc {
 func main() {
 	// Set and parse startup flags
 	flagCustomToken := flag.String("custom-token", "", "The custom token to use for authorizing API requests")
+	flagEnableTLS := flag.Bool("enable-tls", false, "Enable TLS on the server. Requires that a TLS cert and key path are provided")
 	flagHostname := flag.String("hostname", "localhost", "The hostname of the service. Defaults to localhost if not specified")
-	flagPort := flag.Int("port", 443, "The port to listen on. Defaults to 443 if not provided")
+	flagPort := flag.Int("port", 8080, "The port to listen on. Defaults to 8080 if not provided")
 	flagTLSCert := flag.String("tls-crt", "", "The path of the .crt file to initialize server with TLS")
 	flagTLSKey := flag.String("tls-key", "", "The path of the .key file to initialize server with TLS")
 	flagUseCustomToken := flag.Bool("use-custom-token", false, "When true this starts the service with a user generated token instead of automatically generating a token")
 	flag.Parse()
 
-	// Log startup hostname and port
-	log.Printf("KubeCSR server starting up with hostname '%s' over port '%d'", *flagHostname, *flagPort)
+	// Verify a TLS Cert and Key path have been provided if TLS is enabled
+	if *flagEnableTLS {
+		switch {
+		case *flagTLSCert == "":
+			log.Fatal("A cert must be provided to enable TLS")
+			return
+		case *flagTLSKey == "":
+			log.Fatal("A private key must be provided to enable TLS")
+			return
+		}
+	}
 
-	// Set API token used for authorizing API calls
+	// Set API token used for authorizing API a
 	if *flagUseCustomToken {
 		requiredToken = base64EncodeStr(*flagCustomToken)
 	} else {
@@ -128,8 +138,18 @@ func main() {
 		MaxHeaderBytes: 1 << 20,
 	}
 
-	// Listen and serve with TLS
-	if err := server.ListenAndServeTLS(*flagTLSCert, *flagTLSKey); err != nil {
+	// Log startup hostname and port
+	log.Printf("KubeCSR server is starting up with hostname '%s' over port '%d'", *flagHostname, *flagPort)
+
+	// Listen and serve with TLS if enabled
+	if *flagEnableTLS {
+		if err := server.ListenAndServeTLS(*flagTLSCert, *flagTLSKey); err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	// If TLS disabled listen and serve without TLS
+	if err := server.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}
 }
