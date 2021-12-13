@@ -8,8 +8,8 @@
    version="1.1"
    id="svg5"
    inkscape:version="1.1.1 (3bf5ae0d25, 2021-09-20)"
-   sodipodi:docname="kubecsr_logo_golden_wreath_dark.svg"
-   inkscape:export-filename="C:\Users\Tony\OneDrive\Desktop\kubecsr_logo.png"
+   sodipodi:docname="kubecsr_logo.svg"
+   inkscape:export-filename="C:\Users\Tony\OneDrive\Desktop\kubecsr\img\kubecsr_logo.png"
    inkscape:export-xdpi="96"
    inkscape:export-ydpi="96"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
@@ -23,18 +23,18 @@
      borderopacity="1.0"
      inkscape:pageshadow="2"
      inkscape:pageopacity="0"
-     inkscape:pagecheckerboard="false"
+     inkscape:pagecheckerboard="true"
      inkscape:document-units="mm"
      showgrid="false"
-     inkscape:zoom="1.1452195"
-     inkscape:cx="234.01627"
-     inkscape:cy="245.36781"
+     inkscape:zoom="1.8248899"
+     inkscape:cx="283.85274"
+     inkscape:cy="136.99457"
      inkscape:window-width="2736"
      inkscape:window-height="1790"
      inkscape:window-x="-11"
      inkscape:window-y="-11"
      inkscape:window-maximized="1"
-     inkscape:current-layer="layer1"
+     inkscape:current-layer="layer4"
      width="209mm"
      fit-margin-top="0"
      fit-margin-left="0"
@@ -95,9 +95,9 @@
      inkscape:groupmode="layer"
      id="layer1"
      transform="translate(-5.0711511,-19.879195)"
-     style="display:inline">
+     style="display:none">
     <rect
-       style="opacity:0.814696;fill:#333333;stroke:#ffffff;stroke-width:0;stroke-linecap:round;stroke-linejoin:round;paint-order:stroke fill markers;stroke-miterlimit:4;stroke-dasharray:none"
+       style="opacity:0.814696;fill:#333333;stroke:#ffffff;stroke-width:0;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;paint-order:stroke fill markers"
        id="rect1241"
        width="179.45851"
        height="151.75175"
@@ -107,20 +107,7 @@
   <g
      inkscape:groupmode="layer"
      id="layer4"
-     inkscape:label="Wreath">
-    <g
-       id="g2411"
-       clip-path="url(#clipPath2413)"
-       transform="matrix(0.96202096,0,0,1.1582846,-147.25273,-29.31623)"
-       style="display:inline" />
-    <rect
-       style="opacity:1;fill:#333333;fill-opacity:0.81568629;stroke:#ffffff;stroke-width:0;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;paint-order:stroke fill markers"
-       id="rect2961"
-       width="81.242104"
-       height="19.436476"
-       x="39.706707"
-       y="49.277374" />
-  </g>
+     inkscape:label="Wreath" />
   <g
      inkscape:groupmode="layer"
      id="layer2"
@@ -233,6 +220,6 @@
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:40px;line-height:1.25;font-family:QUBE;-inkscape-font-specification:QUBE;white-space:pre;shape-inside:url(#rect21377);display:inline;fill:#000000;stroke:#ffffff;stroke-width:2.37614;stroke-miterlimit:4;stroke-dasharray:none"><tspan
          x="270.81836"
          y="743.3602"
-         id="tspan1115">kubeCSR</tspan></text>
+         id="tspan1333">kubeCSR</tspan></text>
   </g>
 </svg>
