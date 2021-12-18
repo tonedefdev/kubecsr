@@ -6,20 +6,18 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/tonedefdev/kubecsr/api"
+	"github.com/tonedefdev/kubecsr/pkg/csr"
+	"github.com/tonedefdev/kubecsr/pkg/k8scsr"
 )
 
-type kubecsr struct {
-	ClusterName string    `json:"clusterName" binding:"required"`
-	Timestamp   time.Time `json:"timestamp"`
-	RequesterIP string    `json:"requesterIP"`
-	User        string    `json:"user,required" binding:"required"`
-}
-
-var kubecsrs = []kubecsr{}
+var kubecsrs = []api.KubeCSR{}
 var requiredToken string
 
 // base64EncodeStr takes a string and returns a base64 encoded string
@@ -30,13 +28,62 @@ func base64EncodeStr(str string) string {
 
 // createKubconfig adds a request to create a Kubernetes CSR and approve it
 func createkubecsr(c *gin.Context) {
-	var newkubecsr kubecsr
+	var newkubecsr api.KubeCSR
 
 	// Bind the request to the kubecsr struct
 	if err := c.ShouldBindJSON(&newkubecsr); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	csr := csr.CSR{
+		User: newkubecsr.User,
+	}
+
+	key, err := csr.CreatePrivateKey()
+	if err != nil {
+		c.AbortWithError(400, err)
+	}
+
+	newCSR, err := csr.CreateCSR(key)
+	if err != nil {
+		c.AbortWithError(400, err)
+	}
+
+	var exp *int32
+	exp = new(int32)
+	*exp = 180
+
+	filename := fmt.Sprintf("%s_admin_config", uuid.New().String())
+	kubeConfigPath := path.Join(os.Getenv("HOME"), ".kube", filename)
+
+	client, err := k8scsr.NewKubernetesClient(kubeConfigPath)
+	if err != nil {
+		c.AbortWithError(400, err)
+	}
+
+	kubernetesCSR := k8scsr.KubernetesCSR{
+		CertificateRequest: newCSR,
+		ExpirationSeconds:  exp,
+	}
+
+	_, err = kubernetesCSR.CreateKubernetesCSR(client, newkubecsr)
+	if err != nil {
+		c.AbortWithError(400, err)
+	}
+
+	var crt []byte
+	for {
+		time.Sleep(100 * time.Millisecond)
+		crtCheck := kubernetesCSR.GetKubernetesCSR(client, newkubecsr)
+
+		if crtCheck.Status.Certificate != nil {
+			crt = crtCheck.Status.Certificate
+			break
+		}
+	}
+
+	print(crt)
 
 	// Add timestamp to request
 	newkubecsr.Timestamp = time.Now()
