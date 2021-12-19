@@ -1,10 +1,19 @@
 package api
 
-import "time"
+import (
+	"time"
+
+	"github.com/tonedefdev/kubecsr/pkg/csr"
+)
 
 type KubeCSR struct {
-	ClusterName string    `json:"clusterName" binding:"required"`
+	CertificateRequest *csr.CSR        `json:"certificateRequest" binding:"required"`
+	ExpirationSeconds  *int32          `json:"expirationSeconds,omitempty"`
+	Kubeconfig         string          `json:"kubeconfig" binding:"required"`
+	RequestMetadata    RequestMetadata `json:"requestMetadata"`
+}
+
+type RequestMetadata struct {
 	Timestamp   time.Time `json:"timestamp"`
 	RequesterIP string    `json:"requesterIP"`
-	User        string    `json:"user,required" binding:"required"`
 }

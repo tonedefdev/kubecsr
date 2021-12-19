@@ -16,7 +16,7 @@ type CSR struct {
 	PostalCode       []string `json:"postalCode,omitempty"`
 	Province         []string `json:"province,omitempty"`
 	StreetAddress    []string `json:"streetAddress,omitempty"`
-	User             string   `json:"user"`
+	User             string   `json:"user" binding:"required"`
 }
 
 func (c *CSR) CreateCSR(key *rsa.PrivateKey) ([]byte, error) {
@@ -26,14 +26,14 @@ func (c *CSR) CreateCSR(key *rsa.PrivateKey) ([]byte, error) {
 		Locality:           c.Locality,
 		Organization:       c.Organization,
 		OrganizationalUnit: c.OrganizationUnit,
-		StreetAddress:      c.StreetAddress,
 		PostalCode:         c.PostalCode,
 		Province:           c.Province,
+		StreetAddress:      c.StreetAddress,
 	}
 
 	req := &x509.CertificateRequest{
 		Subject:            subject,
-		SignatureAlgorithm: x509.DSAWithSHA256,
+		SignatureAlgorithm: x509.SHA256WithRSA,
 	}
 
 	csr, err := x509.CreateCertificateRequest(rand.Reader, req, key)

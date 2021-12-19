@@ -5,6 +5,7 @@ import (
 
 	"github.com/tonedefdev/kubecsr/api"
 	cert "k8s.io/api/certificates/v1"
+	core "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
@@ -33,9 +34,32 @@ func NewKubernetesClient(kubeConfig string) (*kubernetes.Clientset, error) {
 	return clientset, err
 }
 
+func (k8scsr *KubernetesCSR) ApproveKubernetesCSR(client *kubernetes.Clientset, csr *cert.CertificateSigningRequest) error {
+	conditions := make([]cert.CertificateSigningRequestCondition, 0)
+	condition := cert.CertificateSigningRequestCondition{
+		Message: "Automatically approved by KubeCSR",
+		Status:  core.ConditionTrue,
+		Type:    cert.CertificateApproved,
+	}
+
+	conditions = append(conditions, condition)
+	csr.Status.Conditions = conditions
+
+	typeMeta := meta.TypeMeta{
+		APIVersion: "certificates.k8s.io/v1",
+		Kind:       "CertificateSigningRequest",
+	}
+
+	update := meta.UpdateOptions{
+		TypeMeta: typeMeta,
+	}
+	_, err := client.CertificatesV1().CertificateSigningRequests().UpdateApproval(ctx, csr.Name, csr, update)
+	return err
+}
+
 func (k8scsr *KubernetesCSR) CreateKubernetesCSR(client *kubernetes.Clientset, kubeCSR api.KubeCSR) (*cert.CertificateSigningRequest, error) {
 	objectMeta := meta.ObjectMeta{
-		Name: kubeCSR.User,
+		Name: kubeCSR.CertificateRequest.User,
 	}
 
 	typeMeta := meta.TypeMeta{
@@ -44,7 +68,7 @@ func (k8scsr *KubernetesCSR) CreateKubernetesCSR(client *kubernetes.Clientset, k
 	}
 
 	usage := make([]cert.KeyUsage, 1)
-	usage[0] = "client auth"
+	usage[0] = cert.UsageClientAuth
 
 	csrSpec := cert.CertificateSigningRequestSpec{
 		ExpirationSeconds: k8scsr.ExpirationSeconds,
@@ -77,6 +101,6 @@ func (k8scsr *KubernetesCSR) GetKubernetesCSR(client *kubernetes.Clientset, kube
 		TypeMeta: typeMeta,
 	}
 
-	csr, _ := client.CertificatesV1().CertificateSigningRequests().Get(ctx, kubeCSR.User, get)
+	csr, _ := client.CertificatesV1().CertificateSigningRequests().Get(ctx, kubeCSR.CertificateRequest.User, get)
 	return csr
 }

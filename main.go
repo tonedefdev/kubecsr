@@ -1,7 +1,7 @@
 package main
 
 import (
-	"encoding/base64"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -15,96 +15,150 @@ import (
 	"github.com/tonedefdev/kubecsr/api"
 	"github.com/tonedefdev/kubecsr/pkg/csr"
 	"github.com/tonedefdev/kubecsr/pkg/k8scsr"
+	"github.com/tonedefdev/kubecsr/pkg/kubeconfig"
 )
 
 var kubecsrs = []api.KubeCSR{}
 var requiredToken string
 
-// base64EncodeStr takes a string and returns a base64 encoded string
-func base64EncodeStr(str string) string {
-	encoded := base64.StdEncoding.EncodeToString([]byte(str))
-	return encoded
-}
-
 // createKubconfig adds a request to create a Kubernetes CSR and approve it
-func createkubecsr(c *gin.Context) {
-	var newkubecsr api.KubeCSR
+func createKubeCSR(c *gin.Context) {
+	var newKubeCSR api.KubeCSR
 
 	// Bind the request to the kubecsr struct
-	if err := c.ShouldBindJSON(&newkubecsr); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if err := c.ShouldBindJSON(&newKubeCSR); err != nil {
+		c.ShouldBindJSON(http.StatusBadRequest)
 		return
 	}
 
 	csr := csr.CSR{
-		User: newkubecsr.User,
+		User: newKubeCSR.CertificateRequest.User,
 	}
 
 	key, err := csr.CreatePrivateKey()
 	if err != nil {
-		c.AbortWithError(400, err)
+		log.Print(err)
+		respondWithError(c, 400, "KubeCSR unable to generate RSA private key")
+		return
 	}
 
 	newCSR, err := csr.CreateCSR(key)
 	if err != nil {
-		c.AbortWithError(400, err)
+		log.Print(err)
+		respondWithError(c, 400, "KubeCSR unable to create CSR")
+		return
 	}
-
-	var exp *int32
-	exp = new(int32)
-	*exp = 180
 
 	filename := fmt.Sprintf("%s_admin_config", uuid.New().String())
 	kubeConfigPath := path.Join(os.Getenv("HOME"), ".kube", filename)
 
+	err = kubeconfig.WriteKubeconfigToFile(newKubeCSR, kubeConfigPath)
+	if err != nil {
+		log.Print(err)
+		respondWithError(c, 400, "KubeCSR unable to write kubeconfig to file")
+		return
+	}
+
 	client, err := k8scsr.NewKubernetesClient(kubeConfigPath)
 	if err != nil {
-		c.AbortWithError(400, err)
+		log.Print(err)
+		respondWithError(c, 400, "KubeCSR unable to create a Kubernetes client")
+		return
 	}
 
 	kubernetesCSR := k8scsr.KubernetesCSR{
 		CertificateRequest: newCSR,
-		ExpirationSeconds:  exp,
+		ExpirationSeconds:  newKubeCSR.ExpirationSeconds,
 	}
 
-	_, err = kubernetesCSR.CreateKubernetesCSR(client, newkubecsr)
+	req, err := kubernetesCSR.CreateKubernetesCSR(client, newKubeCSR)
+	print(err)
 	if err != nil {
-		c.AbortWithError(400, err)
+		log.Print(err)
+		respondWithError(c, 400, "KubeCSR unable to create the Kubernetes CSR")
+		return
+	}
+
+	err = kubernetesCSR.ApproveKubernetesCSR(client, req)
+	if err != nil {
+		log.Print(err)
+		respondWithError(c, 400, "KubeCSR unable to approve the Kubernetes CSR")
+		return
 	}
 
 	var crt []byte
+	var attempts = 0
 	for {
+		if attempts > 4 {
+			break
+		}
+
 		time.Sleep(100 * time.Millisecond)
-		crtCheck := kubernetesCSR.GetKubernetesCSR(client, newkubecsr)
+		crtCheck := kubernetesCSR.GetKubernetesCSR(client, newKubeCSR)
 
 		if crtCheck.Status.Certificate != nil {
 			crt = crtCheck.Status.Certificate
 			break
 		}
+
+		attempts++
 	}
 
-	print(crt)
+	if attempts > 4 {
+		respondWithError(c, 400, errors.New("Unable to locate approved Kubernetes CSR"))
+		return
+	}
 
-	// Add timestamp to request
-	newkubecsr.Timestamp = time.Now()
+	pemKey := csr.PEMEncodePrivateKey(key)
+	readKubeconfig, err := kubeconfig.ReadKubeconfig(kubeConfigPath)
+	if err != nil {
+		log.Print(err)
+		respondWithError(c, 400, "KubeCSR was unable to read the admin Kubeconfig from file")
+	}
 
-	// Add requester's IP
-	newkubecsr.RequesterIP = c.Request.RemoteAddr
+	print(string(readKubeconfig))
+
+	unmarshalAdminKube, err := kubeconfig.UnmarshalKubeconfig(readKubeconfig)
+	if err != nil {
+		log.Print(err)
+		respondWithError(c, 400, "KubeCSR was unable to unmarshal the admin Kubeconfig")
+		return
+	}
+
+	kubeconfig := kubeconfig.Kubeconfig{
+		Certifcate: crt,
+		PrivateKey: pemKey,
+		User:       newKubeCSR.CertificateRequest.User,
+	}
+
+	newKubeconfig, err := kubeconfig.NewKubeconfig(unmarshalAdminKube)
+	if err != nil {
+		log.Print(err)
+		respondWithError(c, 400, "KubeCSR was unable to create a new Kubeconfig")
+	}
+
+	metadata := api.RequestMetadata{
+		Timestamp:   time.Now(),
+		RequesterIP: c.Request.RemoteAddr,
+	}
+
+	newKubeCSR.Kubeconfig = newKubeconfig
+	newKubeCSR.RequestMetadata = metadata
 
 	// Add the new kubecsr to the slice
-	kubecsrs = append(kubecsrs, newkubecsr)
-	c.JSON(http.StatusCreated, newkubecsr)
+	kubecsrs = append(kubecsrs, newKubeCSR)
+	c.JSON(http.StatusCreated, newKubeCSR)
 }
 
-// getkubecsr responds with the list of all kubeeconfigs requested as JSON
-func getkubecsr(c *gin.Context) {
+// getKubeCSR responds with the list of all kubeconfigs requested as JSON
+func getKubeCSR(c *gin.Context) {
 	c.JSON(http.StatusOK, kubecsrs)
 }
 
 // initToken creates the initial token if one is not provided and outputs it to the server log
 func initToken() string {
 	token := uuid.New().String()
-	encodedToken := base64EncodeStr(token)
+	encodedToken := kubeconfig.Base64EncodeStr(token)
 	log.Printf("KubeCSR automatitcally generated the authorization bearer token as '%s'", encodedToken)
 	return encodedToken
 }
@@ -120,7 +174,7 @@ func tokenAuthorization() gin.HandlerFunc {
 	return func(c *gin.Context) {
 
 		// Get the Bearer token from the request header
-		token := c.Request.Header.Get("Bearer")
+		token := c.Request.Header.Get("Authorization")
 
 		// Validate token isn't empty
 		if token == "" {
@@ -129,7 +183,8 @@ func tokenAuthorization() gin.HandlerFunc {
 		}
 
 		// Validate that token is expected token
-		if requiredToken != token {
+		bearerToken := fmt.Sprintf("Bearer %s", requiredToken)
+		if bearerToken != token {
 			respondWithError(c, 401, "Invalid API token")
 			return
 		}
@@ -161,7 +216,7 @@ func main() {
 
 	// Set API token used for authorizing API a
 	if *flagUseCustomToken {
-		requiredToken = base64EncodeStr(*flagCustomToken)
+		requiredToken = kubeconfig.Base64EncodeStr(*flagCustomToken)
 	} else {
 		requiredToken = initToken()
 	}
@@ -173,8 +228,8 @@ func main() {
 	router.Use(tokenAuthorization())
 
 	// Setup routes
-	router.GET("/kubecsr", getkubecsr)
-	router.POST("/kubecsr", createkubecsr)
+	router.GET("/kubecsr", getKubeCSR)
+	router.POST("/kubecsr", createKubeCSR)
 
 	// Setup server
 	server := http.Server{
