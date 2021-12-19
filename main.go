@@ -116,8 +116,6 @@ func createKubeCSR(c *gin.Context) {
 		respondWithError(c, 400, "KubeCSR was unable to read the admin Kubeconfig from file")
 	}
 
-	print(string(readKubeconfig))
-
 	unmarshalAdminKube, err := kubeconfig.UnmarshalKubeconfig(readKubeconfig)
 	if err != nil {
 		log.Print(err)
