@@ -49,7 +49,7 @@ func (c *CSR) CreateCSR(key *rsa.PrivateKey) ([]byte, error) {
 	return pemCSR, err
 }
 
-// Generates an RSA Private Key with a 2048 bit length
+// CreatePrivateKey generates an RSA Private Key with a 2048 bit length
 func (c *CSR) CreatePrivateKey() (*rsa.PrivateKey, error) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	return key, err
