@@ -23,6 +23,8 @@ var requiredToken string
 
 // createKubconfig adds a request to create a Kubernetes CSR and approve it
 func createKubeCSR(c *gin.Context) {
+	var attempts = 0
+	var crt []byte
 	var newKubeCSR api.KubeCSR
 
 	// Bind the request to the kubecsr struct
@@ -35,6 +37,7 @@ func createKubeCSR(c *gin.Context) {
 		User: newKubeCSR.CertificateRequest.User,
 	}
 
+	// Generate the RSA private key for the CSR
 	key, err := csr.CreatePrivateKey()
 	if err != nil {
 		log.Print(err)
@@ -42,6 +45,7 @@ func createKubeCSR(c *gin.Context) {
 		return
 	}
 
+	// Create the CSR passing in the previously created RSA private key
 	newCSR, err := csr.CreateCSR(key)
 	if err != nil {
 		log.Print(err)
@@ -49,9 +53,12 @@ func createKubeCSR(c *gin.Context) {
 		return
 	}
 
+	// Set the name and path of the admin Kubeconfig file
 	filename := fmt.Sprintf("%s_admin_config", uuid.New().String())
 	kubeConfigPath := path.Join(os.Getenv("HOME"), ".kube", filename)
 
+	// From the request body decode the Kubeconfig and write it to disk
+	// so it can be used to create a Kubernetes client
 	err = kubeconfig.WriteKubeconfigToFile(newKubeCSR, kubeConfigPath)
 	if err != nil {
 		log.Print(err)
@@ -59,6 +66,7 @@ func createKubeCSR(c *gin.Context) {
 		return
 	}
 
+	// Pass in the Kubeconfig's path and create the Kubernetes client
 	client, err := k8scsr.NewKubernetesClient(kubeConfigPath)
 	if err != nil {
 		log.Print(err)
@@ -71,6 +79,8 @@ func createKubeCSR(c *gin.Context) {
 		ExpirationSeconds:  newKubeCSR.ExpirationSeconds,
 	}
 
+	// Create the Kubernetes CSR and pass in the Kubernetes client to make the request
+	// and the KubeCSR struct
 	req, err := kubernetesCSR.CreateKubernetesCSR(client, newKubeCSR)
 	print(err)
 	if err != nil {
@@ -79,6 +89,7 @@ func createKubeCSR(c *gin.Context) {
 		return
 	}
 
+	// Approve the Kubernetes CSR
 	err = kubernetesCSR.ApproveKubernetesCSR(client, req)
 	if err != nil {
 		log.Print(err)
@@ -86,8 +97,10 @@ func createKubeCSR(c *gin.Context) {
 		return
 	}
 
-	var crt []byte
-	var attempts = 0
+	// Check every 100ms to see if the Kubernetes cluster has generated the certificate
+	// by checking the CSR's status field. This is required as a single pass is often too
+	// fast resulting in the certificate being nil. After five attempts break out of the loop
+	// and respond with an error
 	for {
 		if attempts > 4 {
 			break
@@ -109,13 +122,18 @@ func createKubeCSR(c *gin.Context) {
 		return
 	}
 
+	// Pem encode the RSA private key
 	pemKey := csr.PEMEncodePrivateKey(key)
+
+	// Read the admin kubeconfig so we can load into memory
 	readKubeconfig, err := kubeconfig.ReadKubeconfig(kubeConfigPath)
 	if err != nil {
 		log.Print(err)
 		respondWithError(c, 400, "KubeCSR was unable to read the admin Kubeconfig from file")
 	}
 
+	// Umarshal the Kubeconfig into a KubectlConfig struct so we can extract some of its data
+	// to be used for the new user's Kubeconfig
 	unmarshalAdminKube, err := kubeconfig.UnmarshalKubeconfig(readKubeconfig)
 	if err != nil {
 		log.Print(err)
@@ -129,6 +147,7 @@ func createKubeCSR(c *gin.Context) {
 		User:       newKubeCSR.CertificateRequest.User,
 	}
 
+	// Create the user's new Kubeconfig and return it as a base64 encoded string
 	newKubeconfig, err := kubeconfig.NewKubeconfig(unmarshalAdminKube)
 	if err != nil {
 		log.Print(err)
@@ -140,7 +159,9 @@ func createKubeCSR(c *gin.Context) {
 		RequesterIP: c.Request.RemoteAddr,
 	}
 
+	// Set the response body to include base64 encoded Kubeconfig
 	newKubeCSR.Kubeconfig = newKubeconfig
+	// Add the request metadata struct
 	newKubeCSR.RequestMetadata = metadata
 
 	// Add the new kubecsr to the slice

@@ -12,12 +12,16 @@ import (
 )
 
 type KubernetesCSR struct {
+	// An x509 Certificate Request byte slice
 	CertificateRequest []byte
-	ExpirationSeconds  *int32
+	// The expiration time of the generated Kubernetes certificate
+	ExpirationSeconds *int32
 }
 
 var ctx = context.Background()
 
+// NewKubernetesClient creates a Kubernetes client by reading the Kubeconfig
+// that is provided
 func NewKubernetesClient(kubeConfig string) (*kubernetes.Clientset, error) {
 	// Use the current context in kubeconfig
 	config, err := clientcmd.BuildConfigFromFlags("", kubeConfig)
@@ -34,6 +38,8 @@ func NewKubernetesClient(kubeConfig string) (*kubernetes.Clientset, error) {
 	return clientset, err
 }
 
+// ApproveKubernetesCSR approves a Kubernetes CSR and returns any errors encountered during
+// the approval process
 func (k8scsr *KubernetesCSR) ApproveKubernetesCSR(client *kubernetes.Clientset, csr *cert.CertificateSigningRequest) error {
 	conditions := make([]cert.CertificateSigningRequestCondition, 0)
 	condition := cert.CertificateSigningRequestCondition{
@@ -57,6 +63,7 @@ func (k8scsr *KubernetesCSR) ApproveKubernetesCSR(client *kubernetes.Clientset, 
 	return err
 }
 
+// CreateKubernetesCSR submits a CSR request to the Kubernetes cluster defined in the supplied Kubeconfig
 func (k8scsr *KubernetesCSR) CreateKubernetesCSR(client *kubernetes.Clientset, kubeCSR api.KubeCSR) (*cert.CertificateSigningRequest, error) {
 	objectMeta := meta.ObjectMeta{
 		Name: kubeCSR.CertificateRequest.User,
@@ -91,6 +98,7 @@ func (k8scsr *KubernetesCSR) CreateKubernetesCSR(client *kubernetes.Clientset, k
 	return req, err
 }
 
+// GetKubernetesCSR returns a Kubernetes CSR if found but does not return any errors encountered
 func (k8scsr *KubernetesCSR) GetKubernetesCSR(client *kubernetes.Clientset, kubeCSR api.KubeCSR) *cert.CertificateSigningRequest {
 	typeMeta := meta.TypeMeta{
 		APIVersion: "certificates.k8s.io/v1",

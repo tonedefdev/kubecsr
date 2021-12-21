@@ -13,28 +13,33 @@ import (
 )
 
 type Kubeconfig struct {
+	// The certificate generated via the approved Kubernetes CSR
 	Certifcate []byte
+	// The private key that was originally generated for the request and Kubernetes CSR
 	PrivateKey []byte
-	User       string
+	// The user name that should be leveraged by the Kubeconfig
+	User string
 }
 
+// Base64DecodeString takes in a base64 encoded string and returns a byte slice
 func Base64DecodeString(kubeconfig string) ([]byte, error) {
 	decoded, err := base64.StdEncoding.DecodeString(kubeconfig)
 	return decoded, err
 }
 
-// base64EncodeStr takes a string and returns a base64 encoded string
+// Base64EncodeStr takes a string and returns a base64 encoded string
 func Base64EncodeStr(str string) string {
 	encoded := base64.StdEncoding.EncodeToString([]byte(str))
 	return encoded
 }
 
-// base64EncodeStr takes a string and returns a base64 encoded string
+// Base64EncodeByte takes a byte slice and returns a base64 encoded string
 func Base64EncodeByte(data []byte) string {
 	encoded := base64.StdEncoding.EncodeToString(data)
 	return encoded
 }
 
+// UnmarshalKubeconfig unmarshals a Kubeconfig byte slice and returns a KubectlConfig
 func UnmarshalKubeconfig(kubeconfig []byte) (*kc.KubectlConfig, error) {
 	var unmarshalKubeconfig *kc.KubectlConfig = &kc.KubectlConfig{}
 	newJson, err := yaml.YAMLToJSON(kubeconfig)
@@ -46,6 +51,7 @@ func UnmarshalKubeconfig(kubeconfig []byte) (*kc.KubectlConfig, error) {
 	return unmarshalKubeconfig, err
 }
 
+// NewDirectory verifies if a path exists and creates the path if an error is encountered
 func NewDirectory(path string) error {
 	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
@@ -56,6 +62,8 @@ func NewDirectory(path string) error {
 	return nil
 }
 
+// NewKubeconfig creates a Kubeconfig from the approved Kubernetes CSR certificate and the private key
+// initially used to generate the certificate request
 func (newKubeconfig *Kubeconfig) NewKubeconfig(adminKubeconfig *kc.KubectlConfig) (string, error) {
 	cluster := kc.KubectlCluster{
 		CertificateAuthorityData: adminKubeconfig.Clusters[0].Cluster.CertificateAuthorityData,
@@ -111,11 +119,14 @@ func (newKubeconfig *Kubeconfig) NewKubeconfig(adminKubeconfig *kc.KubectlConfig
 	return yamlConfig, err
 }
 
+// ReadKubeconfig reads the Kubeconfig provided and returns a byte slice
 func ReadKubeconfig(filename string) ([]byte, error) {
 	file, err := os.ReadFile(filename)
 	return file, err
 }
 
+// WriteKubeconfigToFile decodes a base64 encoded Kubeconfig and writes it to file
+// so that it can be used later on by the Kubernetes client to make requests
 func WriteKubeconfigToFile(kubeCSR api.KubeCSR, filename string) error {
 	kubeconfig, err := Base64DecodeString(kubeCSR.Kubeconfig)
 	if err != nil {
